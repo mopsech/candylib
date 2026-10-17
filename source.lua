@@ -1,10 +1,10 @@
 --==================================================================
--- CandyLib v3.0.0
+-- CandyLib v3.0.1
 -- Полностью расширенный исходный код без сокращений.
 --==================================================================
 
 local CandyLib = {}
-CandyLib.Version = '3.0.0'
+CandyLib.Version = '3.0.1'
 CandyLib.Flags = {}
 CandyLib.Signals = {}
 CandyLib.UnloadEnabled = true
@@ -18,7 +18,9 @@ gethui = gethui or get_hidden_gui
 getcustomasset = getcustomasset or getsynasset
 getgenv = getgenv or getfenv
 
--- Файловая система для Roblox Studio
+-- Файловая система (Локальные переменные, чтобы не было конфликтов с readonly окружением)
+local fs_writefile, fs_readfile, fs_isfile, fs_isfolder, fs_makefolder, fs_listfiles, fs_delfile
+
 if game:GetService('RunService'):IsStudio() then
     local folder = game:GetService('ReplicatedFirst'):FindFirstChild('CANDY_FS')
     
@@ -46,7 +48,7 @@ if game:GetService('RunService'):IsStudio() then
         return current 
     end
 
-    getgenv().writefile = function(path, content) 
+    fs_writefile = function(path, content) 
         local current = folder
         for _, segment in next, splitPath(path) do 
             local child = current:FindFirstChild(segment)
@@ -64,22 +66,22 @@ if game:GetService('RunService'):IsStudio() then
         end 
     end
 
-    getgenv().readfile = function(path) 
+    fs_readfile = function(path) 
         local result = walkPath(path)
         return result and result.Value or '' 
     end
 
-    getgenv().isfile = function(path) 
+    fs_isfile = function(path) 
         local success, result = pcall(walkPath, path)
         return success and result and not result:IsA('Folder') 
     end
 
-    getgenv().isfolder = function(path) 
+    fs_isfolder = function(path) 
         local success, result = pcall(walkPath, path)
         return success and result and result:IsA('Folder') 
     end
 
-    getgenv().makefolder = function(path) 
+    fs_makefolder = function(path) 
         local current = folder
         for _, segment in next, splitPath(path) do 
             local child = current:FindFirstChild(segment)
@@ -93,7 +95,7 @@ if game:GetService('RunService'):IsStudio() then
         end 
     end
 
-    getgenv().listfiles = function(path) 
+    fs_listfiles = function(path) 
         local out = {}
         local target = walkPath(path)
         if target then 
@@ -104,7 +106,7 @@ if game:GetService('RunService'):IsStudio() then
         return out 
     end
 
-    getgenv().delfile = function(path) 
+    fs_delfile = function(path) 
         local current = folder
         local segments = splitPath(path)
         for i, segment in next, segments do 
@@ -116,22 +118,14 @@ if game:GetService('RunService'):IsStudio() then
             end 
         end 
     end
-
-    writefile = getgenv().writefile
-    readfile = getgenv().readfile
-    isfile = getgenv().isfile
-    isfolder = getgenv().isfolder
-    makefolder = getgenv().makefolder
-    listfiles = getgenv().listfiles
-    delfile = getgenv().delfile
 else
-    writefile = writefile or getgenv().writefile
-    readfile = readfile or getgenv().readfile
-    isfile = isfile or getgenv().isfile
-    isfolder = isfolder or getgenv().isfolder
-    makefolder = makefolder or getgenv().makefolder
-    listfiles = listfiles or getgenv().listfiles
-    delfile = delfile or getgenv().delfile
+    fs_writefile = getgenv().writefile or writefile
+    fs_readfile = getgenv().readfile or readfile
+    fs_isfile = getgenv().isfile or isfile
+    fs_isfolder = getgenv().isfolder or isfolder
+    fs_makefolder = getgenv().makefolder or makefolder
+    fs_listfiles = getgenv().listfiles or listfiles
+    fs_delfile = getgenv().delfile or delfile
 end
 
 -- Сервисы
@@ -1372,8 +1366,9 @@ function CandyLib:CreateWindow(config)
         ConfigFolder = config.ConfigFolder or 'CandyConfigs' 
     }
     
-    if not isfolder(Window.ConfigFolder) then
-        makefolder(Window.ConfigFolder)
+    -- ИСПОЛЬЗУЕМ ЛОКАЛЬНУЮ ФУНКЦИЮ fs_makefolder
+    if not fs_isfolder(Window.ConfigFolder) then
+        fs_makefolder(Window.ConfigFolder)
     end
 
     -- Основа окна
@@ -1408,7 +1403,6 @@ function CandyLib:CreateWindow(config)
     Round(rail, 14)
     Stroke(rail, Theme.BorderSoft, 0.5)
     
-    -- Логотип в левой панели
     if config.Logo then 
         local li = Instance.new('ImageLabel')
         li.BackgroundTransparency = 1
@@ -1419,7 +1413,6 @@ function CandyLib:CreateWindow(config)
         li.Parent = rail 
     end
     
-    -- Список табов
     local tabList = Instance.new('Frame')
     tabList.BackgroundTransparency = 1
     tabList.Position = UDim2.new(0, 10, 0, 68)
@@ -1432,7 +1425,6 @@ function CandyLib:CreateWindow(config)
     tabListLayout.Padding = UDim.new(0, 6)
     tabListLayout.Parent = tabList
     
-    -- Аватар пользователя
     local avatar = Instance.new('ImageLabel')
     avatar.BackgroundTransparency = 1
     avatar.AnchorPoint = Vector2.new(0.5, 1)
@@ -1457,7 +1449,6 @@ function CandyLib:CreateWindow(config)
     header.Size = UDim2.new(1, 0, 0, 52)
     header.Parent = contentPanel
     
-    -- Логотип в шапке контента
     local headerLogo = Instance.new('ImageLabel')
     headerLogo.BackgroundTransparency = 1
     headerLogo.Position = UDim2.new(0, 20, 0.5, -14)
@@ -1465,7 +1456,6 @@ function CandyLib:CreateWindow(config)
     headerLogo.Image = config.Logo or ''
     headerLogo.Parent = header
     
-    -- Название и описание в шапке
     local headerTitle = Instance.new('TextLabel')
     headerTitle.BackgroundTransparency = 1
     headerTitle.Position = UDim2.new(0, (config.Logo and 56 or 20), 0, 10)
@@ -1482,14 +1472,13 @@ function CandyLib:CreateWindow(config)
     headerSub.Position = UDim2.new(0, (config.Logo and 56 or 20), 0, 28)
     headerSub.Size = UDim2.new(1, -200, 0, 14)
     headerSub.Font = Enum.Font.Gotham
-    headerSub.Text = config.Content or 'v3.0.0'
+    headerSub.Text = config.Content or 'v3.0.1'
     headerSub.TextColor3 = Theme.TextMuted
     headerSub.TextSize = 11
     headerSub.TextTransparency = 0.3
     headerSub.TextXAlignment = Enum.TextXAlignment.Left
     headerSub.Parent = header
 
-    -- Кнопка конфигов
     local cfgBtn = Instance.new('Frame')
     cfgBtn.BackgroundColor3 = Theme.PanelAlt
     cfgBtn.BackgroundTransparency = 0.05
@@ -1524,7 +1513,6 @@ function CandyLib:CreateWindow(config)
     cfgLbl.TextTruncate = Enum.TextTruncate.AtEnd
     cfgLbl.Parent = cfgBtn
 
-    -- Выпадающее окно конфигов
     local cfgPopup = Instance.new('Frame')
     cfgPopup.BackgroundColor3 = Theme.Panel
     cfgPopup.BackgroundTransparency = 1
@@ -1552,7 +1540,6 @@ function CandyLib:CreateWindow(config)
     cfgList.Padding = UDim.new(0, 4)
     cfgList.Parent = cfgScroll
     
-    -- Поле создания нового конфига
     local newCfgRow = Instance.new('Frame')
     newCfgRow.BackgroundColor3 = Theme.PanelAlt
     newCfgRow.BackgroundTransparency = 0.05
@@ -1586,7 +1573,6 @@ function CandyLib:CreateWindow(config)
     newCfgBtn.TextSize = 14
     newCfgBtn.Parent = newCfgRow
 
-    -- Логика конфигов
     local function xorEncode(data, key)
         local out = {}
         for i = 1, #data do 
@@ -1641,7 +1627,7 @@ function CandyLib:CreateWindow(config)
         
         local files = {}
         pcall(function() 
-            files = listfiles(Window.ConfigFolder) or {} 
+            files = fs_listfiles(Window.ConfigFolder) or {} 
         end)
         
         for i, path in ipairs(files) do
@@ -1690,7 +1676,7 @@ function CandyLib:CreateWindow(config)
                 delBtn.Parent = row
                 
                 CreateInput(row, function()
-                    local success, data = pcall(readfile, path)
+                    local success, data = pcall(fs_readfile, path)
                     if success and data then
                         pcall(function() 
                             setConfigData(xorEncode(data, XKEY)) 
@@ -1703,13 +1689,13 @@ function CandyLib:CreateWindow(config)
                 
                 CreateInput(saveBtn, function()
                     local enc = xorEncode(getConfigData(), XKEY)
-                    pcall(writefile, path, enc)
+                    pcall(fs_writefile, path, enc)
                     CandyLib:Notify({Title = 'Config', Content = 'Saved '..name, Icon = 'floppy-disk'})
                 end)
                 
                 CreateInput(delBtn, function()
                     if name == 'Default' then return end
-                    pcall(delfile, path)
+                    pcall(fs_delfile, path)
                     refreshConfigs()
                     CandyLib:Notify({Title = 'Config', Content = 'Deleted '..name, Icon = 'trash-can'})
                 end)
@@ -1755,7 +1741,7 @@ function CandyLib:CreateWindow(config)
         local name = newCfgInput.Text:gsub('[\\/]', ''):sub(1, 24)
         if name and name ~= '' then
             local enc = xorEncode(getConfigData(), XKEY)
-            pcall(writefile, Window.ConfigFolder .. '/' .. name, enc)
+            pcall(fs_writefile, Window.ConfigFolder .. '/' .. name, enc)
             currentCfg = name
             cfgLbl.Text = name
             newCfgInput.Text = ''
@@ -1766,8 +1752,8 @@ function CandyLib:CreateWindow(config)
 
     task.delay(0.5, function()
         local path = Window.ConfigFolder .. '/Default'
-        if isfile(path) then
-            local success, data = pcall(readfile, path)
+        if fs_isfile(path) then
+            local success, data = pcall(fs_readfile, path)
             if success and data then
                 pcall(function() 
                     setConfigData(xorEncode(data, XKEY)) 
@@ -1782,7 +1768,7 @@ function CandyLib:CreateWindow(config)
             local path = Window.ConfigFolder .. '/Default'
             if currentCfg == 'Default' then
                 local enc = xorEncode(getConfigData(), XKEY)
-                pcall(writefile, path, enc)
+                pcall(fs_writefile, path, enc)
             end
         end
     end)
