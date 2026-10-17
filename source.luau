@@ -187,7 +187,7 @@ local function Stroke(obj, color, transparency, thickness)
     return s
 end
 
--- ---------- Simple logging / notifications ----------
+-- ---------- Notifications ----------
 function CandyLib:Notify(opts)
     opts = opts or {}
     local title   = opts.Title   or 'Notification'
@@ -371,7 +371,7 @@ local function CreateToggle(parent, config)
 end
 
 --=========================================================================
--- ELEMENT: SLIDER
+-- ELEMENT: SLIDER (FIXED)
 --=========================================================================
 local function CreateSlider(parent, config)
     config = config or {}
@@ -489,13 +489,16 @@ local function CreateSlider(parent, config)
         if n then setFromValue(n) else setFromValue(current, true) end
     end))
 
-    Track(input2 := (function()
-        local b = CreateInput(row)
-        b.ZIndex = row.ZIndex - 5
-        Track(b.MouseEnter:Connect(function() Tween(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.9}) end))
-        Track(b.MouseLeave:Connect(function() Tween(row, TweenInfo.new(0.15), {BackgroundTransparency = 1}) end))
-        return b
-    end)())
+    local hoverBtn = Instance.new('TextButton')
+    hoverBtn.BackgroundTransparency = 1
+    hoverBtn.BorderSizePixel = 0
+    hoverBtn.Size = UDim2.fromScale(1, 1)
+    hoverBtn.Text = ''
+    hoverBtn.Active = false
+    hoverBtn.ZIndex = 0
+    hoverBtn.Parent = row
+    Track(hoverBtn.MouseEnter:Connect(function() Tween(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.9}) end))
+    Track(hoverBtn.MouseLeave:Connect(function() Tween(row, TweenInfo.new(0.15), {BackgroundTransparency = 1}) end))
 
     local api = {}
     function api:GetValue() return current end
@@ -792,7 +795,6 @@ local function CreateDropdown(parent, config)
     local current = default
     if multi and type(current)~='table' then current = {} end
 
-    -- popup
     local popup = Instance.new('Frame')
     popup.BackgroundColor3 = Theme.Panel
     popup.BackgroundTransparency = 1
@@ -895,14 +897,15 @@ local function CreateDropdown(parent, config)
             popup.Visible = true
             Tween(popup, TweenInfo.new(0.16), {BackgroundTransparency = 0.03})
             Tween(popupStroke, TweenInfo.new(0.16), {Transparency = 0.55})
-            Task = task.delay(0, function()
+            task.spawn(function()
                 while open do
-                    if not MouseOver(popup) and not MouseOver(btn) and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+                        and not MouseOver(popup) and not MouseOver(btn) then
                         open = false
                         popup.Visible = false
                         popup.BackgroundTransparency = 1
                     end
-                    task.wait(0.1)
+                    task.wait(0.05)
                 end
             end)
         else
@@ -964,7 +967,6 @@ local function CreateColorPicker(parent, config)
 
     local current = default
 
-    -- color popup
     local popup = Instance.new('Frame')
     popup.BackgroundColor3 = Theme.Panel
     popup.BackgroundTransparency = 1
@@ -1064,7 +1066,6 @@ local function CreateColorPicker(parent, config)
     end
     updateSV()
 
-    -- drag on SV
     local draggingSV = false
     Track(sv.InputBegan:Connect(function(inp)
         if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
@@ -1074,18 +1075,18 @@ local function CreateColorPicker(parent, config)
             updateSV()
         end
     end))
-    Track(UserInputService.InputEnded:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
-            draggingSV = false
-            draggingHue = false
-        end
-    end))
     local draggingHue = false
     Track(hue.InputBegan:Connect(function(inp)
         if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
             draggingHue = true
             local rel = (inp.Position.X - hue.AbsolutePosition.X) / hue.AbsoluteSize.X
             h = math.clamp(rel,0,1); updateSV()
+        end
+    end))
+    Track(UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+            draggingSV = false
+            draggingHue = false
         end
     end))
     Track(UserInputService.InputChanged:Connect(function(inp)
@@ -1107,7 +1108,7 @@ local function CreateColorPicker(parent, config)
     end))
 
     local open = false
-    local inp = CreateInput(swatch, function()
+    CreateInput(swatch, function()
         open = not open
         if open then
             local abs = swatch.AbsolutePosition
@@ -1121,7 +1122,7 @@ local function CreateColorPicker(parent, config)
             Tween(pStroke, TweenInfo.new(0.14), {Transparency = 1})
             task.delay(0.15, function() if not open then popup.Visible=false end end)
         end
-    end))
+    end)
 
     local api = {}
     function api:GetValue() return current end
@@ -1205,12 +1206,10 @@ function CandyLib:CreateWindow(cfg)
     local Window = {
         Tabs = {},
         Current = 1,
-        Signal = Instance.new('BindableEvent'),
         ConfigFolder = cfgFolder,
         Opened = false,
     }
 
-    -- MAIN FRAME
     local main = Instance.new('Frame')
     main.Name = CandyLib.RandomString()
     main.AnchorPoint = Vector2.new(0.5,0.5)
@@ -1222,17 +1221,15 @@ function CandyLib:CreateWindow(cfg)
     main.Size = size
     main.Parent = CandyLib.ScreenGui
     Round(main, 18)
-    local mainStroke = Stroke(main, Theme.BorderSoft, 0.45, 1.2)
+    Stroke(main, Theme.BorderSoft, 0.45, 1.2)
     Glow(main, Theme.AccentGlow, 1.2)
 
-    -- drag frame
     local dragBar = Instance.new('Frame')
     dragBar.BackgroundTransparency = 1
     dragBar.Size = UDim2.new(1,0,0,40)
     dragBar.Parent = main
     Drag(dragBar, main, 0.12)
 
-    -- ICON RAIL (left)
     local rail = Instance.new('Frame')
     rail.BackgroundColor3 = Theme.Panel
     rail.BackgroundTransparency = 0.05
@@ -1242,7 +1239,6 @@ function CandyLib:CreateWindow(cfg)
     Round(rail, 14)
     Stroke(rail, Theme.BorderSoft, 0.5)
 
-    -- rail logo
     if logo then
         local logoBox = Instance.new('Frame')
         logoBox.BackgroundColor3 = Theme.PanelAlt
@@ -1260,7 +1256,6 @@ function CandyLib:CreateWindow(cfg)
         li.Parent = logoBox
     end
 
-    -- tab list
     local tabList = Instance.new('Frame')
     tabList.BackgroundTransparency = 1
     tabList.Position = UDim2.new(0,10,0,68)
@@ -1272,7 +1267,6 @@ function CandyLib:CreateWindow(cfg)
     tabListLayout.Padding = UDim.new(0,6)
     tabListLayout.Parent = tabList
 
-    -- user avatar at bottom
     local avatarBox = Instance.new('Frame')
     avatarBox.BackgroundColor3 = Theme.PanelAlt
     avatarBox.BackgroundTransparency = 0.05
@@ -1290,7 +1284,6 @@ function CandyLib:CreateWindow(cfg)
     avatar.Parent = avatarBox
     Round(avatar, 20)
 
-    -- CONTENT PANEL
     local contentPanel = Instance.new('Frame')
     contentPanel.BackgroundColor3 = Theme.Panel
     contentPanel.BackgroundTransparency = 0.03
@@ -1300,7 +1293,6 @@ function CandyLib:CreateWindow(cfg)
     Round(contentPanel, 14)
     Stroke(contentPanel, Theme.BorderSoft, 0.5)
 
-    -- HEADER (inside content panel)
     local header = Instance.new('Frame')
     header.BackgroundTransparency = 1
     header.Size = UDim2.new(1,0,0,52)
@@ -1329,7 +1321,6 @@ function CandyLib:CreateWindow(cfg)
     headerSub.TextXAlignment = Enum.TextXAlignment.Left
     headerSub.Parent = header
 
-    -- config button
     local cfgBtn = Instance.new('Frame')
     cfgBtn.BackgroundColor3 = Theme.PanelAlt
     cfgBtn.BackgroundTransparency = 0.05
@@ -1364,7 +1355,6 @@ function CandyLib:CreateWindow(cfg)
     cfgLbl.TextTruncate = Enum.TextTruncate.AtEnd
     cfgLbl.Parent = cfgBtn
 
-    -- separator
     local sep = Instance.new('Frame')
     sep.BackgroundColor3 = Theme.BorderSoft
     sep.BackgroundTransparency = 0.6
@@ -1373,16 +1363,13 @@ function CandyLib:CreateWindow(cfg)
     sep.Size = UDim2.new(1,-32,0,1)
     sep.Parent = contentPanel
 
-    -- TAB BODY CONTAINER
     local body = Instance.new('Frame')
     body.BackgroundTransparency = 1
     body.Position = UDim2.new(0,10,0,56)
     body.Size = UDim2.new(1,-20,1,-64)
     body.Parent = contentPanel
 
-    -----------------------------------------------------------------------
-    -- CONFIG SYSTEM
-    -----------------------------------------------------------------------
+    -- ============= CONFIG SYSTEM =============
     local cfgPopup = Instance.new('Frame')
     cfgPopup.BackgroundColor3 = Theme.Panel
     cfgPopup.BackgroundTransparency = 1
@@ -1408,7 +1395,6 @@ function CandyLib:CreateWindow(cfg)
     cfgList.Padding = UDim.new(0,4)
     cfgList.Parent = cfgScroll
 
-    -- create-new-config row
     local newCfgRow = Instance.new('Frame')
     newCfgRow.BackgroundColor3 = Theme.PanelAlt
     newCfgRow.BackgroundTransparency = 0.05
@@ -1442,7 +1428,6 @@ function CandyLib:CreateWindow(cfg)
     newCfgBtn.TextSize = 14
     newCfgBtn.Parent = newCfgRow
 
-    -- simple XOR "encryption" so files aren't plain JSON
     local function xorEncode(data, key)
         local out = {}
         for i = 1, #data do
@@ -1586,7 +1571,6 @@ function CandyLib:CreateWindow(cfg)
         end
     end)
 
-    -- load default on start
     task.delay(0.5, function()
         local path = cfgFolder..'/Default'
         if isfile(path) then
@@ -1597,7 +1581,6 @@ function CandyLib:CreateWindow(cfg)
         end
     end)
 
-    -- periodic auto-save for Default
     task.spawn(function()
         while true do
             task.wait(15)
@@ -1609,9 +1592,7 @@ function CandyLib:CreateWindow(cfg)
         end
     end)
 
-    -----------------------------------------------------------------------
-    -- TABS
-    -----------------------------------------------------------------------
+    -- ============= TABS =============
     function Window:AddTab(tabCfg)
         tabCfg = tabCfg or {}
         local tabName = tabCfg.Name or 'Tab'
@@ -1623,7 +1604,6 @@ function CandyLib:CreateWindow(cfg)
             Name = tabName,
         }
 
-        -- icon button
         local btn = Instance.new('Frame')
         btn.BackgroundColor3 = Theme.PanelAlt
         btn.BackgroundTransparency = 1
@@ -1643,7 +1623,6 @@ function CandyLib:CreateWindow(cfg)
         ic.TextTransparency = 0.3
         ic.Parent = btn
 
-        -- page
         local page = Instance.new('ScrollingFrame')
         page.BackgroundTransparency = 1
         page.BorderSizePixel = 0
@@ -1716,7 +1695,6 @@ function CandyLib:CreateWindow(cfg)
         return tab
     end
 
-    -- keybind toggle
     Track(UserInputService.InputBegan:Connect(function(inp, gp)
         if gp then return end
         if inp.KeyCode.Name == keybind then
