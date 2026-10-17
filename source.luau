@@ -1,10 +1,9 @@
 --==================================================================
--- CandyLib v1.0.0
--- Minimalist / glass-candy themed UI library for Roblox
+-- CandyLib v1.0.1 (Studio & FileSystem fixes)
 --==================================================================
 
 local CandyLib = {}
-CandyLib.Version = '1.0.0'
+CandyLib.Version = '1.0.1'
 CandyLib.Flags   = {}
 CandyLib.Signals = {}
 CandyLib.UnloadEnabled = true
@@ -19,13 +18,13 @@ gethui         = gethui         or get_hidden_gui
 getcustomasset = getcustomasset or getsynasset
 getgenv        = getgenv        or getfenv
 
--- ---------- Studio file emulation ----------
-if game:GetService('RunService'):IsStudio() and not writefile then
+-- ---------- Принудительная эмуляция файлов для Studio ----------
+if game:GetService('RunService'):IsStudio() then
     local folder = game:GetService('ReplicatedFirst'):FindFirstChild('CANDY_FS')
         or Instance.new('Folder', game:GetService('ReplicatedFirst'))
     folder.Name = 'CANDY_FS'
     local function split(p) return (string.find(p,'/',1,true) and string.split(p,'/')) or (string.find(p,'\\',1,true) and string.split(p,'\\')) or {p} end
-    local function walk(p) local b=folder for _,v in next,split(p) do b=b[v] end return b end
+    local function walk(p) local b=folder for _,v in next,split(p) do if b then b=b[v] end end return b end
     getgenv().writefile = function(p, c)
         local b=folder; local seg=split(p)
         for i,v in next,seg do
@@ -34,9 +33,9 @@ if game:GetService('RunService'):IsStudio() and not writefile then
             else if ch:IsA('StringValue') then ch.Value=c end; b=ch end
         end
     end
-    getgenv().readfile = function(p) return walk(p).Value end
-    getgenv().isfile   = function(p) local s,r=pcall(walk,p); return s and not r:IsA('Folder') end
-    getgenv().isfolder = function(p) local s,r=pcall(walk,p); return s and r:IsA('Folder') end
+    getgenv().readfile = function(p) local r = walk(p); return r and r.Value or '' end
+    getgenv().isfile   = function(p) local s,r=pcall(walk,p); return s and r and not r:IsA('Folder') end
+    getgenv().isfolder = function(p) local s,r=pcall(walk,p); return s and r and r:IsA('Folder') end
     getgenv().makefolder = function(p)
         local b=folder
         for _,v in next,split(p) do
@@ -46,7 +45,8 @@ if game:GetService('RunService'):IsStudio() and not writefile then
     end
     getgenv().listfiles = function(p)
         local out={}
-        for _,v in next,walk(p):GetChildren() do table.insert(out,p..'/'..tostring(v)) end
+        local f = walk(p)
+        if f then for _,v in next,f:GetChildren() do table.insert(out,p..'/'..tostring(v)) end end
         return out
     end
     getgenv().delfile = function(p)
@@ -56,14 +56,22 @@ if game:GetService('RunService'):IsStudio() and not writefile then
             if i==#seg and ch then ch:Destroy() else b=ch end
         end
     end
+    writefile  = getgenv().writefile
+    readfile   = getgenv().readfile
+    isfile     = getgenv().isfile
+    isfolder   = getgenv().isfolder
+    makefolder = getgenv().makefolder
+    listfiles  = getgenv().listfiles
+    delfile    = getgenv().delfile
+else
+    writefile  = writefile  or getgenv().writefile
+    readfile   = readfile   or getgenv().readfile
+    isfile     = isfile     or getgenv().isfile
+    isfolder   = isfolder   or getgenv().isfolder
+    makefolder = makefolder or getgenv().makefolder
+    listfiles  = listfiles  or getgenv().listfiles
+    delfile    = delfile    or getgenv().delfile
 end
-writefile  = writefile  or getgenv().writefile
-readfile   = readfile   or getgenv().readfile
-isfile     = isfile     or getgenv().isfile
-isfolder   = isfolder   or getgenv().isfolder
-makefolder = makefolder or getgenv().makefolder
-listfiles  = listfiles  or getgenv().listfiles
-delfile    = delfile    or getgenv().delfile
 
 -- ---------- Services ----------
 local TweenService       = cloneref(game:GetService('TweenService'))
@@ -167,15 +175,6 @@ local function Round(obj, r)
     c.CornerRadius = UDim.new(0, r or 10)
     c.Parent = obj
     return c
-end
-local function Pad(obj, all)
-    local p = Instance.new('UIPadding')
-    p.PaddingTop    = UDim.new(0, all)
-    p.PaddingBottom = UDim.new(0, all)
-    p.PaddingLeft   = UDim.new(0, all)
-    p.PaddingRight  = UDim.new(0, all)
-    p.Parent = obj
-    return p
 end
 local function Stroke(obj, color, transparency, thickness)
     local s = Instance.new('UIStroke')
@@ -1201,7 +1200,9 @@ function CandyLib:CreateWindow(cfg)
     local size      = cfg.Size or UDim2.fromOffset(720, 500)
     local keybind   = cfg.Keybind or 'Insert'
 
-    if not isfolder(cfgFolder) then makefolder(cfgFolder) end
+    pcall(function()
+        if not isfolder(cfgFolder) then makefolder(cfgFolder) end
+    end)
 
     local Window = {
         Tabs = {},
@@ -1466,7 +1467,8 @@ function CandyLib:CreateWindow(cfg)
         for _, ch in ipairs(cfgScroll:GetChildren()) do
             if ch ~= newCfgRow and ch:IsA('Frame') then ch:Destroy() end
         end
-        local files = listfiles(cfgFolder) or {}
+        local files = {}
+        pcall(function() files = listfiles(cfgFolder) or {} end)
         for i, path in ipairs(files) do
             local name = path:sub(#cfgFolder+2)
             if name and name ~= '' then
